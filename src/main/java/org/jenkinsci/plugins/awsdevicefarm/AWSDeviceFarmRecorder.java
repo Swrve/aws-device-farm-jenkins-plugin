@@ -548,13 +548,8 @@ public class AWSDeviceFarmRecorder extends Recorder {
                 for (ArtifactCategory category : new ArrayList<ArtifactCategory>(Arrays.asList(ArtifactCategory.values()))) {
                     ListArtifactsResult result = adf.listArtifacts(run.getRun().getArn(), category);
                     for (Artifact artifact : result.getArtifacts()) {
-                        String arn = artifact.getArn().split(":")[6];
-                        String testArn = arn.substring(0, arn.lastIndexOf("/"));
-                        String id = arn.substring(arn.lastIndexOf("/") + 1);
-                        String extension = artifact.getExtension().replaceFirst("^\\.", "");
-                        FilePath artifactFilePath = new FilePath(tests.get(testArn), String.format("%s-%s.%s", artifact.getName(), id, extension));
-                        URL url = new URL(artifact.getUrl());
-                        artifactFilePath.write().write(IOUtils.toByteArray(url.openStream()));
+                        //downloadAndStoreArtifact(tests, artifact);
+                        downloadAndStoreArtifactCalabash(tests, artifact);
                     }
                 }
                 writeToLog(String.format("Results archive saved in %s", artifactsDir.getName()));
@@ -568,6 +563,38 @@ public class AWSDeviceFarmRecorder extends Recorder {
         }
 
         return true;
+    }
+
+    private void downloadAndStoreArtifact(Map<String, FilePath> tests, Artifact artifact) throws IOException, InterruptedException {
+        String arn = artifact.getArn().split(":")[6];
+        String testArn = arn.substring(0, arn.lastIndexOf("/"));
+        String id = arn.substring(arn.lastIndexOf("/") + 1);
+        String extension = artifact.getExtension().replaceFirst("^\\.", "");
+        FilePath artifactFilePath = new FilePath(tests.get(testArn), String.format("%s-%s.%s", artifact.getName(), id, extension));
+        URL url = new URL(artifact.getUrl());
+        artifactFilePath.write().write(IOUtils.toByteArray(url.openStream()));
+    }
+
+    private void downloadAndStoreArtifactCalabash(Map<String, FilePath> tests, Artifact artifact) throws IOException, InterruptedException {
+        String arn = artifact.getArn().split(":")[6];
+        String testArn = arn.substring(0, arn.lastIndexOf("/"));
+        String id = arn.substring(arn.lastIndexOf("/") + 1);
+        String extension = artifact.getExtension().replaceFirst("^\\.", "");
+
+        //Skip any pngs that are not of the format "i_take_a_screenshot_named*.png"
+        //This relates to the requested calabash screenshots and not other automatically
+        //generated screenshots which we don't care for.
+        if (extension.equals("png")) {
+            if (!artifact.getName().startsWith("i_take_a_screenshot_named_")) {
+                writeToLog(String.format("[*Skip*] %s-%s.%s", artifact.getName(), id, extension));
+                return;
+            }
+        }
+        writeToLog(String.format("[Save] %s-%s.%s", artifact.getName(), id, extension));
+
+        FilePath artifactFilePath = new FilePath(tests.get(testArn), String.format("%s-%s.%s", artifact.getName(), id, extension));
+        URL url = new URL(artifact.getUrl());
+        artifactFilePath.write().write(IOUtils.toByteArray(url.openStream()));
     }
 
     private Location getScheduleRunConfigurationLocation(Boolean deviceLocation) {
