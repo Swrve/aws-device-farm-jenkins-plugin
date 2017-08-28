@@ -38,11 +38,7 @@ import hudson.EnvVars;
 import hudson.Extension;
 import hudson.FilePath;
 import hudson.Launcher;
-import hudson.model.AbstractBuild;
-import hudson.model.AbstractProject;
-import hudson.model.Action;
-import hudson.model.BuildListener;
-import hudson.model.Result;
+import hudson.model.*;
 import hudson.tasks.BuildStepDescriptor;
 import hudson.tasks.BuildStepMonitor;
 import hudson.tasks.Publisher;
@@ -50,6 +46,7 @@ import hudson.tasks.Recorder;
 import hudson.util.FormValidation;
 import hudson.util.IOUtils;
 import hudson.util.ListBoxModel;
+import jenkins.tasks.SimpleBuildStep;
 import net.sf.json.JSONObject;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.lang.StringUtils;
@@ -69,6 +66,7 @@ import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.QueryParameter;
 import org.kohsuke.stapler.StaplerRequest;
 
+import javax.annotation.Nonnull;
 import java.io.File;
 import java.io.IOException;
 import java.io.PrintStream;
@@ -87,7 +85,7 @@ import java.util.Map;
 /**
  * Post-build step for running tests on AWS Device Farm.
  */
-public class AWSDeviceFarmRecorder extends Recorder {
+public class AWSDeviceFarmRecorder extends Recorder implements SimpleBuildStep {
 
     ////// All of these fields have to be public so that they can be read (via reflection) by Jenkins. Probably not the
     ////// greatest thing in the world given that this is *allegedly* supposed to be an immutable class.
@@ -383,7 +381,8 @@ public class AWSDeviceFarmRecorder extends Recorder {
     /**
      * Perform the post-build test action.
      *
-     * @param build    The build to follow.
+     * @param build    The run to follow.
+     * @param workspace The currentFilePath
      * @param launcher The launcher.
      * @param listener The build launcher.
      * @return Whether or not the post-build action succeeded.
@@ -391,31 +390,32 @@ public class AWSDeviceFarmRecorder extends Recorder {
      * @throws InterruptedException
      */
     @Override
-    public boolean perform(AbstractBuild build, Launcher launcher, BuildListener listener) throws IOException, InterruptedException {
+    public void perform(@Nonnull Run<?, ?> build,
+                        @Nonnull FilePath workspace,
+                        @Nonnull Launcher launcher,
+                        @Nonnull TaskListener listener) throws IOException, InterruptedException {
         // Check if the build result set from a previous build step.
         // A null build result indicates that the build is still ongoing and we're
         // likely being run as a build step by the "Any Build Step Plugin".
         Result buildResult = build.getResult();
         if (buildResult != null && buildResult.isWorseOrEqualTo(Result.FAILURE)) {
-            return false;
+            return;
         }
 
         EnvVars env = build.getEnvironment(listener);
-        Map<String, String> parameters = build.getBuildVariables();
+        //Map<String, String> parameters = ((AbstractBuild)build).getBuildVariables();
+        Map<String, String> parameters = build.getEnvironment(listener); //Bit of a hack - ultimately we don't care about the build parameters below
 
         log = listener.getLogger();
 
         // Artifacts location for this build on master.
         FilePath artifactsDir = new FilePath(build.getArtifactsDir());
 
-        // Workspace (potentially remote if using slave).
-        FilePath workspace = build.getWorkspace();
-
         // Validate user selection & input values.
         boolean isValid = validateConfiguration() && validateTestConfiguration();
         if (!isValid) {
             writeToLog("Invalid configuration.");
-            return false;
+            return;
         }
 
         // Create & configure the AWSDeviceFarm client.
@@ -559,10 +559,10 @@ public class AWSDeviceFarmRecorder extends Recorder {
             build.setResult(action.getBuildResult(ignoreRunError));
         } catch (AWSDeviceFarmException e) {
             writeToLog(e.getMessage());
-            return false;
+            return;
         }
 
-        return true;
+        return;
     }
 
     private void downloadAndStoreArtifact(Map<String, FilePath> tests, Artifact artifact) throws IOException, InterruptedException {
