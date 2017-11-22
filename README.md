@@ -1,7 +1,14 @@
 AWS Device Farm Jenkins Plugin
 ------------------------------
 
+This plugin has been updated to selectively download only the video/image files that are needed, rather than downloading the whole lot, saving time and electrons! :)
+
+[Swrve](https://swrve.com)
+
+<hr/>
+
 AWS Device Farm integration with Jenkins CI
+---
 
 This plugin provides AWS Device Farm functionality from your own Jenkins CI server:
 
